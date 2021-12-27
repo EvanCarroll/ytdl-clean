@@ -1,4 +1,4 @@
-youtube-dl clean
+`ytdl-clean`: the youtube-dl cleanup
 ====
 
 There are two competing projects on GitHub that have different conventions for saving files,
