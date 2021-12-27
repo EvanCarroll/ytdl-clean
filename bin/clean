@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import json
+import jsonpickle
+
+class File(object):
+    HIGH = 1
+    LOW  = 0
+    def __init__(self, basename):
+        self.key = None
+        self.basename = basename
+        m = re.search( r'([-[ ])(\w+)]?\.\w{1,3}$', basename)
+        if m:
+            self.key = m[2]
+
+            if m[1] == '[':
+                self.priority = self.HIGH
+            else:
+                self.priority = self.LOW
+        else:
+            raise Exception(f"Invalid filename {basename}")
+    
+    def is_highpriority(self):
+        return self.priority == self.HIGH
+
+    def is_lowpriority(self):
+        return not(self.is_highpriority())
+
+    def basename(self):
+        return self.basename
+
+    def key(self):
+        return self.key
+
+class Dir(object):
+
+    def __init__(self, path):
+        self.db = {}
+        files = os.listdir(path)
+        for f in files:
+            if re.match('.*\.(swp|part|ytdl|py|sh)', f):
+                continue
+
+            #print(f'Processing [{f}]')
+
+            try:
+                fo = File(f)
+                #print(f'\tGot {fo.basename}')
+                if fo.key in self.db:
+                    self.db[fo.key].append(fo)
+                else:
+                    self.db[fo.key] = [fo]
+            except Exception:
+                #print(f'\tSkipping {f}')
+                pass
+
+    def has_highpriority(self, key):
+        for file in self.db[key]:
+            if file.is_highpriority():
+                return True
+        return False
+
+    def get_low_priority_by_key(self, key):
+        return filter( lambda fo: fo.is_lowpriority(), self.db[key] )
+
+    def has_dupes(self, key):
+        return len(self.db[key]) > 1
+
+    def get_keys_with_dupes(self):
+        return filter( lambda key: self.has_dupes(key), self.db.keys() )
+
+    def get_files_to_purge(self):
+        for key in self.get_dupes_with_keeper():
+            if self.has_highpriority(key):
+                for fo in self.get_low_priority_by_key(key):
+                    yield fo
+
+    """
+    Returns keys
+    """
+    def get_dupes_with_keeper(self):
+        return filter( lambda key: self.has_highpriority(key), self.get_keys_with_dupes() )
+    
+    def get_dupes_undefined(self):
+        return filter( lambda key: not(self.has_highpriority(key)), self.get_keys_with_dupes() )
+    
+db = Dir('.')
+
+for fo in db.get_files_to_purge():
+    print(f'Removing {fo.basename}')
+    os.remove(fo.basename);
