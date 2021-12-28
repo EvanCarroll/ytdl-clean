@@ -18,6 +18,7 @@ Installation
 ====
 
 ```sh
+make test
 sudo make install
 
 # cd into directory
