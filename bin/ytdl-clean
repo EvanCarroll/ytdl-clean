@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
 import os
 import re
 import json
 import jsonpickle
+import stat
+from functools import total_ordering
 
+@total_ordering
 class File(object):
     HIGH = 1
     LOW  = 0
-    def __init__(self, basename):
+    def __init__(self, basename, dir):
+        self._dir = dir
         self.key = None
-        self.basename = basename
+        self.basename = Path(basename)
         m = re.search( r'([-[ ])(\w+)]?\.\w{1,3}$', basename)
         if m:
             self.key = m[2]
@@ -21,6 +26,28 @@ class File(object):
                 self.priority = self.LOW
         else:
             raise Exception(f"Invalid filename {basename}")
+
+    def __lt__(self, other):
+        if isinstance(other, File):
+            # print( f'\n\t__lt__:({self.absname()}, {self.is_highpriority()}): ({other.absname()}, {other.is_highpriority()})' )
+            if self.key == None or other.key == None or self.key != other.key:
+                return NotImplemented
+            elif other.is_highpriority() and not self.is_highpriority():
+                return False
+            elif not other.is_highpriority() and self.is_highpriority():
+                return True
+            else:
+                # print(f'\n\t\t4: {self.absname()} {self.ctime()} < ({other.absname()} {other.ctime()})')
+                return self.ctime() < other.ctime()
+        return NotImplemented
+
+    def __eq__(self, other):
+        if isinstance(other, File) and self.absname() == other.absname():
+            True
+        return False
+
+    def ctime(self):
+        return os.lstat(self.basename)[stat.ST_CTIME]
     
     def is_highpriority(self):
         return self.priority == self.HIGH
@@ -28,8 +55,8 @@ class File(object):
     def is_lowpriority(self):
         return not(self.is_highpriority())
 
-    def basename(self):
-        return self.basename
+    def absname(self):
+        return self.basename.relative_to(self._dir.path)
 
     def key(self):
         return self.key
@@ -38,7 +65,8 @@ class Dir(object):
 
     def __init__(self, path):
         self.db = {}
-        files = os.listdir(path)
+        self.path = Path(path)
+        files = os.listdir(Path(path))
         for f in files:
             if re.match('.*\.(swp|part|ytdl|py|sh)', f):
                 continue
@@ -46,7 +74,7 @@ class Dir(object):
             #print(f'Processing [{f}]')
 
             try:
-                fo = File(f)
+                fo = File(f, self)
                 #print(f'\tGot {fo.basename}')
                 if fo.key in self.db:
                     self.db[fo.key].append(fo)
@@ -56,30 +84,32 @@ class Dir(object):
                 #print(f'\tSkipping {f}')
                 pass
 
+    def path(self):
+        return self.path
+
     def has_highpriority(self, key):
         for file in self.db[key]:
             if file.is_highpriority():
                 return True
         return False
-
+    
     def get_low_priority_by_key(self, key):
         return filter( lambda fo: fo.is_lowpriority(), self.db[key] )
 
     def has_dupes(self, key):
         return len(self.db[key]) > 1
 
-    def get_keys_with_dupes(self):
-        return filter( lambda key: self.has_dupes(key), self.db.keys() )
-
-    def get_files_to_purge(self):
-        for key in self.get_dupes_with_keeper():
-            if self.has_highpriority(key):
-                for fo in self.get_low_priority_by_key(key):
-                    yield fo
+    def get_sorted_files(self, key):
+        # print("\n\tSorting", key, [f.absname() for f in self.db[key]])
+        for f in sorted(self.db[key]):
+            yield f
 
     """
     Returns keys
     """
+    def get_keys_with_dupes(self):
+        return filter( lambda key: self.has_dupes(key), self.db.keys() )
+
     def get_dupes_with_keeper(self):
         return filter( lambda key: self.has_highpriority(key), self.get_keys_with_dupes() )
     
@@ -88,6 +118,14 @@ class Dir(object):
     
 db = Dir('.')
 
-for fo in db.get_files_to_purge():
-    print(f'Removing {fo.basename}')
-    os.remove(fo.basename);
+# for fo in db.get_files_to_purge():
+#     print(f'Removing {fo.absname()}')
+#     os.remove(fo.absname());
+
+import pprint;
+for k in db.get_keys_with_dupes():
+    # print( f'\n\n\nPROCESSING {k}'  )
+    files = db.get_sorted_files(k);
+    for fo in list(db.get_sorted_files(k))[1:]:
+        print(f"\nRemoving [{fo.absname()}]");
+        os.remove(fo.absname());

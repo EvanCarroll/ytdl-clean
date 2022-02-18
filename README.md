@@ -12,7 +12,9 @@ These projects save files differently so you may have
 * `foo -k123.mp4`
 * `foo [k123].mp4` (newest convetion)
 
-This python script will deduplicate them to the newest convention of `foo [k123].mp4`
+This python script will deduplicate them to the newest convention of `foo
+[k123].mp4`. Further in the event it detects the same ID in the directory it's
+run, it will purge out files that are older.
 
 Installation
 ====

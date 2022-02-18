@@ -4,4 +4,4 @@ install:
 
 .PHONY: test
 test:
-	(cd ./test/; sh ./run_tests.sh)
+	(cd ./test/; sh ./run_tests.sh || (rm *.mp4 && exit 1) )
